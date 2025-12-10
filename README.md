@@ -183,35 +183,63 @@ slack-calendar-autobot/
 
 ## Testing
 
-### Manual Testing
+A comprehensive test suite is available in the `tests/` directory. See [tests/README.md](tests/README.md) for detailed information.
 
-1. **Test Calendar Fetch:**
+### Quick Test (No Credentials Required)
+
+Test core functionality without API credentials:
+
+```bash
+# Test time utilities
+node tests/test-time.js
+
+# Test formatters
+node tests/test-formatters.js
+
+# Test milestone detection
+node tests/test-milestones.js
+```
+
+### Integration Tests (Requires Credentials)
+
+Test API integrations with your credentials:
+
+```bash
+# Test Google Calendar integration
+node tests/test-calendar.js
+
+# Test Slack integration
+node tests/test-slack.js
+
+# Test full end-to-end flow (without posting to Slack)
+node tests/test-endpoint.js daily
+node tests/test-endpoint.js weekly
+```
+
+### Manual Endpoint Testing
+
+1. **Start dev server:**
    ```bash
-   node -e "import('./src/calendar/google.js').then(m => m.fetchCalendarEvents(new Date(), new Date(Date.now() + 86400000)).then(console.log))"
+   npm run local
    ```
 
-2. **Test Slack Posting:**
-   - Use the API endpoint with your test channel
-   - Verify message format and content
+2. **Test endpoints:**
+   ```bash
+   # Test daily digest
+   curl http://localhost:3000/api/digest?mode=daily
 
-3. **Test Cron Execution:**
-   - Use Vercel's cron job testing feature
-   - Or manually trigger: `curl https://your-app.vercel.app/api/digest?mode=daily`
+   # Test weekly digest
+   curl http://localhost:3000/api/digest?mode=weekly
+   ```
 
-### Integration Testing
+3. **Test error handling:**
+   ```bash
+   # Missing mode parameter
+   curl http://localhost:3000/api/digest
 
-Create a test script to verify end-to-end flow:
-
-```javascript
-// test-integration.js
-import { fetchCalendarEvents } from './src/calendar/google.js';
-import { getDailyDateRange } from './src/utils/time.js';
-
-const { start, end } = getDailyDateRange();
-const result = await fetchCalendarEvents(start, end);
-console.log('Events:', result.events.length);
-console.log('Milestones:', result.milestones.length);
-```
+   # Invalid method
+   curl -X POST http://localhost:3000/api/digest?mode=daily
+   ```
 
 ## Troubleshooting
 
