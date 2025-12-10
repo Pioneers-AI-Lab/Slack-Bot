@@ -1,0 +1,31 @@
+{
+    "name": "slack-calendar-autobot",
+    "version": "0.9.0",
+    "description": "Automated Slack digests from Google Calendar events",
+    "main": "src/index.js",
+    "type": "module",
+    "scripts": {
+        "local": "npx vercel dev",
+        "deploy": "npx vercel deploy",
+        "test": "node --test"
+    },
+    "keywords": [
+        "slack",
+        "calendar",
+        "automation",
+        "serverless"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "@slack/web-api": "^7.0.0",
+        "googleapis": "^128.0.0",
+        "dotenv": "^16.4.0"
+    },
+    "devDependencies": {
+        "vercel": "^34.0.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

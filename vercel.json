@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/digest?mode=daily",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/digest?mode=weekly",
+      "schedule": "0 9 * * 1"
+    }
+  ]
+}
+
