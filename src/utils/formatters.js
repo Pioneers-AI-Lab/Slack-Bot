@@ -6,29 +6,45 @@ import { formatDate, formatTimeRange, getWeekNumber } from './time.js';
  * @returns {string} Formatted event string
  */
 function formatEvent(event) {
-  const title = event.summary || 'Untitled Event';
-  const description = event.description || '';
-  
-  let timeStr = '';
-  if (event.start.dateTime) {
-    // Timed event
-    const start = new Date(event.start.dateTime);
-    const end = new Date(event.end.dateTime);
-    timeStr = formatTimeRange(start, end);
-  } else if (event.start.date) {
-    // All-day event
-    timeStr = 'All day';
-  }
+    const title = event.summary || 'Untitled Event';
+    const description = event.description || '';
+    const location = event.location || '';
 
-  let eventText = `*${title}*`;
-  if (timeStr) {
-    eventText += ` • ${timeStr}`;
-  }
-  if (description) {
-    eventText += `\n${description}`;
-  }
+    // Split description at first line break:
+    // - Short description (before first \n) is shown in the digest
+    // - Long description (after first \n) is ignored for now (reserved for future use)
+    const shortDescription = description.includes('\n')
+        ? description.split('\n')[0].trim()
+        : description.trim();
 
-  return eventText;
+    let timeStr = '';
+    if (event.start?.dateTime) {
+        // Timed event
+        const start = new Date(event.start.dateTime);
+        const end = new Date(event.end.dateTime);
+        timeStr = formatTimeRange(start, end);
+    } else if (event.start?.date) {
+        // All-day event
+        timeStr = 'All day';
+    }
+
+    // Line 1: Title
+    let eventText = `*${title}*`;
+
+    // Line 2: Time and place (below the title)
+    const metaParts = [];
+    if (timeStr) metaParts.push(timeStr);
+    if (location) metaParts.push(location);
+    if (metaParts.length > 0) {
+        eventText += `\n${metaParts.join(' • ')}`;
+    }
+
+    // Line 3: Short description (optional)
+    if (shortDescription) {
+        eventText += `\n${shortDescription}`;
+    }
+
+    return eventText;
 }
 
 /**
@@ -38,95 +54,95 @@ function formatEvent(event) {
  * @returns {Array} Slack Block Kit blocks
  */
 export function formatDailyDigest(events, milestones) {
-  const today = new Date();
-  const blocks = [
-    {
-      type: 'header',
-      text: {
-        type: 'plain_text',
-        text: `📅 Daily Calendar Digest - ${formatDate(today)}`,
-        emoji: true
-      }
-    },
-    {
-      type: 'divider'
-    }
-  ];
-
-  // Milestones section
-  if (milestones.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '*🎯 Today\'s Milestones*'
-      }
-    });
-
-    milestones.forEach(event => {
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: formatEvent(event)
+    const today = new Date();
+    const blocks = [
+        {
+            type: 'header',
+            text: {
+                type: 'plain_text',
+                text: `📅 Daily Calendar Digest - ${formatDate(today)}`,
+                emoji: true
+            }
+        },
+        {
+            type: 'divider'
         }
-      });
-    });
+    ];
 
+    // Milestones section
+    if (milestones.length > 0) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '*🎯 Today\'s Milestones*'
+            }
+        });
+
+        milestones.forEach(event => {
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: formatEvent(event)
+                }
+            });
+        });
+
+        if (events.length > 0) {
+            blocks.push({
+                type: 'divider'
+            });
+        }
+    }
+
+    // Regular events section
     if (events.length > 0) {
-      blocks.push({
-        type: 'divider'
-      });
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '*📋 Today\'s Events*'
+            }
+        });
+
+        events.forEach(event => {
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: formatEvent(event)
+                }
+            });
+        });
     }
-  }
 
-  // Regular events section
-  if (events.length > 0) {
+    // Empty state
+    if (events.length === 0 && milestones.length === 0) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '_No events scheduled for today._'
+            }
+        });
+    }
+
+    // Footer
     blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '*📋 Today\'s Events*'
-      }
+        type: 'divider'
     });
-
-    events.forEach(event => {
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: formatEvent(event)
-        }
-      });
-    });
-  }
-
-  // Empty state
-  if (events.length === 0 && milestones.length === 0) {
     blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '_No events scheduled for today._'
-      }
+        type: 'context',
+        elements: [
+            {
+                type: 'mrkdwn',
+                text: `Generated on ${formatDate(today)}`
+            }
+        ]
     });
-  }
 
-  // Footer
-  blocks.push({
-    type: 'divider'
-  });
-  blocks.push({
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `Generated on ${formatDate(today)}`
-      }
-    ]
-  });
-
-  return blocks;
+    return blocks;
 }
 
 /**
@@ -136,127 +152,130 @@ export function formatDailyDigest(events, milestones) {
  * @returns {Array} Slack Block Kit blocks
  */
 export function formatWeeklyDigest(events, milestones) {
-  const today = new Date();
-  const weekNumber = getWeekNumber(today);
-  const blocks = [
-    {
-      type: 'header',
-      text: {
-        type: 'plain_text',
-        text: `📅 Weekly Calendar Digest - Week ${weekNumber}`,
-        emoji: true
-      }
-    },
-    {
-      type: 'divider'
-    }
-  ];
-
-  // Milestones section
-  if (milestones.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '*🎯 This Week\'s Milestones*'
-      }
-    });
-
-    milestones.forEach(event => {
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: formatEvent(event)
+    const today = new Date();
+    const weekNumber = getWeekNumber(today);
+    const blocks = [
+        {
+            type: 'header',
+            text: {
+                type: 'plain_text',
+                text: `📅 Weekly Calendar Digest - Week ${weekNumber}`,
+                emoji: true
+            }
+        },
+        {
+            type: 'divider'
         }
-      });
-    });
+    ];
 
-    if (events.length > 0) {
-      blocks.push({
-        type: 'divider'
-      });
-    }
-  }
-
-  // Regular events section
-  if (events.length > 0) {
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '*📋 This Week\'s Events*'
-      }
-    });
-
-    // Group events by day
-    const eventsByDay = {};
-    events.forEach(event => {
-      let dateKey;
-      if (event.start.dateTime) {
-        dateKey = new Date(event.start.dateTime).toISOString().split('T')[0];
-      } else if (event.start.date) {
-        dateKey = event.start.date;
-      } else {
-        return;
-      }
-
-      if (!eventsByDay[dateKey]) {
-        eventsByDay[dateKey] = [];
-      }
-      eventsByDay[dateKey].push(event);
-    });
-
-    // Sort days and format
-    Object.keys(eventsByDay).sort().forEach(dateKey => {
-      const dayEvents = eventsByDay[dateKey];
-      const date = new Date(dateKey + 'T00:00:00Z');
-      
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*${formatDate(date)}*`
-        }
-      });
-
-      dayEvents.forEach(event => {
+    // Milestones section
+    if (milestones.length > 0) {
         blocks.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `  ${formatEvent(event)}`
-          }
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '*🎯 This Week\'s Milestones*'
+            }
         });
-      });
-    });
-  }
 
-  // Empty state
-  if (events.length === 0 && milestones.length === 0) {
+        milestones.forEach(event => {
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: formatEvent(event)
+                }
+            });
+        });
+
+        if (events.length > 0) {
+            blocks.push({
+                type: 'divider'
+            });
+        }
+    }
+
+    // Regular events section
+    if (events.length > 0) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '*📋 This Week\'s Events*'
+            }
+        });
+
+        // Group events by day
+        const eventsByDay = {};
+        events.forEach(event => {
+            let dateKey;
+            if (event.start?.dateTime) {
+                dateKey = new Date(event.start.dateTime).toISOString().split('T')[0];
+            } else if (event.start?.date) {
+                dateKey = event.start.date;
+            } else {
+                return;
+            }
+
+            if (!eventsByDay[dateKey]) {
+                eventsByDay[dateKey] = [];
+            }
+            eventsByDay[dateKey].push(event);
+        });
+
+        // Sort days and format
+        Object.keys(eventsByDay)
+            .sort()
+            .forEach(dateKey => {
+                const dayEvents = eventsByDay[dateKey];
+                const date = new Date(`${dateKey}T00:00:00Z`);
+
+                blocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*${formatDate(date)}*`
+                    }
+                });
+
+                dayEvents.forEach(event => {
+                    blocks.push({
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `  ${formatEvent(event)}`
+                        }
+                    });
+                });
+            });
+    }
+
+    // Empty state
+    if (events.length === 0 && milestones.length === 0) {
+        blocks.push({
+            type: 'section',
+            text: {
+                type: 'mrkdwn',
+                text: '_No events scheduled for this week._'
+            }
+        });
+    }
+
+    // Footer
     blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '_No events scheduled for this week._'
-      }
+        type: 'divider'
     });
-  }
+    blocks.push({
+        type: 'context',
+        elements: [
+            {
+                type: 'mrkdwn',
+                text: `Week ${weekNumber} • Generated on ${formatDate(today)}`
+            }
+        ]
+    });
 
-  // Footer
-  blocks.push({
-    type: 'divider'
-  });
-  blocks.push({
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `Week ${weekNumber} • Generated on ${formatDate(today)}`
-      }
-    ]
-  });
-
-  return blocks;
+    return blocks;
 }
+
 
