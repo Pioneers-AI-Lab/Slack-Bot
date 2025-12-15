@@ -1,0 +1,268 @@
+{
+    "name": "Calendar Digest (Daily & Weekly)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 8 * * *"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger-daily",
+            "name": "Daily Schedule (08:00 UTC)",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [240, 200]
+        },
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 9 * * 1"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger-weekly",
+            "name": "Weekly Schedule (Mon 09:00 UTC)",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [240, 400]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Set mode to 'daily'\nreturn {\n  json: {\n    mode: 'daily'\n  }\n};"
+            },
+            "id": "set-mode-daily",
+            "name": "Set Mode: Daily",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [460, 200]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Set mode to 'weekly'\nreturn {\n  json: {\n    mode: 'weekly'\n  }\n};"
+            },
+            "id": "set-mode-weekly",
+            "name": "Set Mode: Weekly",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [460, 400]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Calculate date range based on mode (daily or weekly)\nconst mode = $input.first().json.mode || 'daily';\nconst now = new Date();\n\nlet start, end, weekNumber;\n\nif (mode === 'daily') {\n  // Daily: today's date range in UTC\n  start = new Date(Date.UTC(\n    now.getUTCFullYear(),\n    now.getUTCMonth(),\n    now.getUTCDate(),\n    0, 0, 0, 0\n  ));\n  end = new Date(Date.UTC(\n    now.getUTCFullYear(),\n    now.getUTCMonth(),\n    now.getUTCDate(),\n    23, 59, 59, 999\n  ));\n} else {\n  // Weekly: Monday to Sunday in UTC\n  const currentDay = now.getUTCDay();\n  \n  // Calculate Monday\n  const monday = new Date(now);\n  monday.setUTCDate(now.getUTCDate() + (currentDay === 0 ? 1 : (currentDay === 1 ? 0 : 8 - currentDay)));\n  monday.setUTCHours(0, 0, 0, 0);\n  \n  // Calculate Sunday (6 days after Monday)\n  const sunday = new Date(monday);\n  sunday.setUTCDate(monday.getUTCDate() + 6);\n  sunday.setUTCHours(23, 59, 59, 999);\n  \n  start = monday;\n  end = sunday;\n  \n  // Get week number\n  function getWeekNumber(date) {\n    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));\n    const dayNum = d.getUTCDay() || 7;\n    d.setUTCDate(d.getUTCDate() + 4 - dayNum);\n    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));\n    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);\n  }\n  \n  weekNumber = getWeekNumber(monday);\n}\n\nreturn {\n  json: {\n    mode: mode,\n    timeMin: start.toISOString(),\n    timeMax: end.toISOString(),\n    weekNumber: weekNumber || null,\n    startDate: start.toISOString().split('T')[0],\n    endDate: end.toISOString().split('T')[0]\n  }\n};"
+            },
+            "id": "calculate-date-range",
+            "name": "Calculate Date Range",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [680, 300]
+        },
+        {
+            "parameters": {
+                "calendarId": "={{ $env.GOOGLE_CALENDAR_ID }}",
+                "options": {
+                    "timeMin": "={{ $json.timeMin }}",
+                    "timeMax": "={{ $json.timeMax }}",
+                    "singleEvents": true,
+                    "orderBy": "startTime"
+                }
+            },
+            "id": "fetch-calendar-events",
+            "name": "Fetch Calendar Events",
+            "type": "n8n-nodes-base.googleCalendar",
+            "typeVersion": 1,
+            "position": [900, 300],
+            "credentials": {
+                "googleCalendarOAuth2Api": {
+                    "id": "google-calendar-credentials",
+                    "name": "Google Calendar account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Process events and separate milestones from regular events\nconst items = $input.all();\nconst events = [];\nconst milestones = [];\n\n// Get mode from previous node\nconst mode = $('Calculate Date Range').first().json.mode || 'daily';\n\n// Extract events from Google Calendar response\nfor (const item of items) {\n  const calendarEvents = item.json.items || [];\n  \n  for (const event of calendarEvents) {\n    const title = event.summary || '';\n    const description = event.description || '';\n    const text = `${title} ${description}`.toLowerCase();\n    \n    const isMilestone = text.includes('[milestone]') || text.includes('milestone:');\n    \n    if (isMilestone) {\n      milestones.push(event);\n    } else {\n      events.push(event);\n    }\n  }\n}\n\nreturn {\n  json: {\n    events: events,\n    milestones: milestones,\n    mode: mode\n  }\n};"
+            },
+            "id": "process-events",
+            "name": "Process Events",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [1120, 300]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format digest as Slack Block Kit blocks (supports both daily and weekly)\nconst { events, milestones, mode } = $input.first().json;\nconst dateRangeData = $('Calculate Date Range').first().json;\nconst weekNumber = dateRangeData.weekNumber;\n\nfunction getRandomEmoji() {\n  const emojis = [\n    '📅', '📆', '🗓️', '📝', '📋', '📌', '🎯', '⭐', '✨',\n    '🔥', '💡', '🚀', '🎉', '🎊', '🌟', '💫', '⚡', '🌈',\n    '📚', '📖', '💼', '💻', '📱', '📧', '🏢', '🌍', '🗺️',\n    '⏰', '🕐', '☕', '🍕', '🍔', '🌮', '🥗', '🍱', '🎨',\n    '🎭', '🎬', '🎮', '🏆', '🥇', '🎁', '🎈', '🎪', '🎲'\n  ];\n  return emojis[Math.floor(Math.random() * emojis.length)];\n}\n\nfunction formatDate(date) {\n  return date.toLocaleDateString('en-US', {\n    weekday: 'long',\n    year: 'numeric',\n    month: 'long',\n    day: 'numeric'\n  });\n}\n\nfunction formatTimeRange(start, end) {\n  const startTime = new Date(start).toLocaleTimeString('en-US', {\n    hour: 'numeric',\n    minute: '2-digit',\n    hour12: true\n  });\n  const endTime = new Date(end).toLocaleTimeString('en-US', {\n    hour: 'numeric',\n    minute: '2-digit',\n    hour12: true\n  });\n  return `${startTime} - ${endTime}`;\n}\n\nfunction formatEvent(event) {\n  const title = event.summary || 'Untitled Event';\n  const description = event.description || '';\n  const location = event.location || '';\n  \n  const shortDescription = description.includes('\\n\\n')\n    ? description.split('\\n\\n')[0].trim()\n    : description.trim();\n  \n  let timeStr = '';\n  if (event.start?.dateTime) {\n    timeStr = formatTimeRange(event.start.dateTime, event.end.dateTime);\n  } else if (event.start?.date) {\n    timeStr = 'All day';\n  }\n  \n  const emoji = getRandomEmoji();\n  let eventText = `${emoji} *${title}*`;\n  \n  const metaParts = [];\n  if (location) metaParts.push(location);\n  if (timeStr) metaParts.push(timeStr);\n  if (metaParts.length > 0) {\n    eventText += `\\n📍 ${metaParts.join(' • ')}`;\n  }\n  \n  if (shortDescription) {\n    const indentedDescription = shortDescription\n      .split('\\n')\n      .map(line => `    ${line}`)\n      .join('\\n');\n    eventText += `\\n${indentedDescription}`;\n  }\n  \n  return eventText;\n}\n\nconst today = new Date();\nconst isDaily = mode === 'daily';\n\n// Header\nconst blocks = [\n  {\n    type: 'header',\n    text: {\n      type: 'plain_text',\n      text: isDaily \n        ? `📅 Daily Calendar Digest - ${formatDate(today)}`\n        : `📅 Weekly Calendar Digest - Week ${weekNumber}`,\n      emoji: true\n    }\n  },\n  {\n    type: 'divider'\n  }\n];\n\n// Milestones section\nif (milestones.length > 0) {\n  blocks.push({\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: isDaily ? '*🎯 Today\\'s Milestones*' : '*🎯 This Week\\'s Milestones*'\n    }\n  });\n  \n  milestones.forEach(event => {\n    blocks.push({\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: formatEvent(event)\n      }\n    });\n  });\n  \n  if (events.length > 0) {\n    blocks.push({\n      type: 'divider'\n    });\n  }\n}\n\n// Regular events section\nif (events.length > 0) {\n  blocks.push({\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: isDaily ? '*📋 Today\\'s Events*' : '*📋 This Week\\'s Events*'\n    }\n  });\n  \n  if (isDaily) {\n    // Daily: just list events\n    events.forEach(event => {\n      blocks.push({\n        type: 'section',\n        text: {\n          type: 'mrkdwn',\n          text: formatEvent(event)\n        }\n      });\n    });\n  } else {\n    // Weekly: group events by day\n    const eventsByDay = {};\n    events.forEach(event => {\n      let dateKey;\n      if (event.start?.dateTime) {\n        dateKey = new Date(event.start.dateTime).toISOString().split('T')[0];\n      } else if (event.start?.date) {\n        dateKey = event.start.date;\n      } else {\n        return;\n      }\n      \n      if (!eventsByDay[dateKey]) {\n        eventsByDay[dateKey] = [];\n      }\n      eventsByDay[dateKey].push(event);\n    });\n    \n    // Sort days and format\n    Object.keys(eventsByDay)\n      .sort()\n      .forEach(dateKey => {\n        const dayEvents = eventsByDay[dateKey];\n        const date = new Date(`${dateKey}T00:00:00Z`);\n        \n        blocks.push({\n          type: 'section',\n          text: {\n            type: 'mrkdwn',\n            text: `*${formatDate(date)}*`\n          }\n        });\n        \n        dayEvents.forEach(event => {\n          blocks.push({\n            type: 'section',\n            text: {\n              type: 'mrkdwn',\n              text: `  ${formatEvent(event)}`\n            }\n          });\n        });\n      });\n  }\n}\n\n// Empty state\nif (events.length === 0 && milestones.length === 0) {\n  blocks.push({\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: isDaily ? '_No events scheduled for today._' : '_No events scheduled for this week._'\n    }\n  });\n}\n\n// Footer\nblocks.push({\n  type: 'divider'\n});\nblocks.push({\n  type: 'context',\n  elements: [\n    {\n      type: 'mrkdwn',\n      text: isDaily \n        ? `Generated on ${formatDate(today)}`\n        : `Week ${weekNumber} • Generated on ${formatDate(today)}`\n    }\n  ]\n});\n\nreturn {\n  json: {\n    blocks: blocks,\n    events_count: events.length,\n    milestones_count: milestones.length,\n    mode: mode\n  }\n};"
+            },
+            "id": "format-digest",
+            "name": "Format Digest",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [1340, 300]
+        },
+        {
+            "parameters": {
+                "channel": "={{ $env.SLACK_CHANNEL_ID }}",
+                "text": "Calendar Digest",
+                "blocks": "={{ $json.blocks }}",
+                "options": {}
+            },
+            "id": "post-to-slack",
+            "name": "Post to Slack",
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.1,
+            "position": [1560, 300],
+            "credentials": {
+                "slackApi": {
+                    "id": "slack-credentials",
+                    "name": "Slack account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "continueOnFail": true,
+                "channel": "={{ $env.SLACK_ADMIN_CHANNEL_ID }}",
+                "text": "={{ `🚨 Calendar Autobot Error: ${$json.error?.message || $('Post to Slack').first().json.error?.message || 'Unknown error occurred'}` }}",
+                "options": {}
+            },
+            "id": "notify-admin",
+            "name": "Notify Admin (Error)",
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.1,
+            "position": [1780, 200],
+            "credentials": {
+                "slackApi": {
+                    "id": "slack-credentials",
+                    "name": "Slack account"
+                }
+            },
+            "onError": "continue"
+        }
+    ],
+    "connections": {
+        "Daily Schedule (08:00 UTC)": {
+            "main": [
+                [
+                    {
+                        "node": "Set Mode: Daily",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Weekly Schedule (Mon 09:00 UTC)": {
+            "main": [
+                [
+                    {
+                        "node": "Set Mode: Weekly",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Set Mode: Daily": {
+            "main": [
+                [
+                    {
+                        "node": "Calculate Date Range",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Set Mode: Weekly": {
+            "main": [
+                [
+                    {
+                        "node": "Calculate Date Range",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Calculate Date Range": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Calendar Events",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Calendar Events": {
+            "main": [
+                [
+                    {
+                        "node": "Process Events",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Events": {
+            "main": [
+                [
+                    {
+                        "node": "Format Digest",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Digest": {
+            "main": [
+                [
+                    {
+                        "node": "Post to Slack",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Post to Slack": {
+            "main": [
+                []
+            ],
+            "error": [
+                [
+                    {
+                        "node": "Notify Admin (Error)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "settings": {
+        "executionOrder": "v1",
+        "errorWorkflow": "",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner",
+        "timezone": "UTC"
+    },
+    "staticData": null,
+    "tags": [],
+    "triggerCount": 2,
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "versionId": "1"
+}
+
