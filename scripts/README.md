@@ -29,9 +29,13 @@ npm run call:daily
 # Call weekly digest (local)
 npm run call:weekly
 
-# Update the production URL in package.json, then:
+# Call production endpoint (set VERCEL_URL environment variable first)
+export VERCEL_URL=https://your-project.vercel.app
 npm run call:daily:prod
 npm run call:weekly:prod
+
+# Or pass URL directly as argument
+node scripts/call-endpoint.js daily https://your-project.vercel.app
 ```
 
 ## call-endpoint.sh

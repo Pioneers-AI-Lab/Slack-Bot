@@ -1,6 +1,21 @@
 import { formatDate, formatTimeRange, getWeekNumber } from './time.js';
 
 /**
+ * Get a random emoji from a curated list for event titles
+ * @returns {string} Random emoji
+ */
+function getRandomEmoji() {
+    const emojis = [
+        '📅', '📆', '🗓️', '📝', '📋', '📌', '🎯', '⭐', '✨',
+        '🔥', '💡', '🚀', '🎉', '🎊', '🌟', '💫', '⚡', '🌈',
+        '📚', '📖', '💼', '💻', '📱', '📧', '🏢', '🌍', '🗺️',
+        '⏰', '🕐', '☕', '🍕', '🍔', '🌮', '🥗', '🍱', '🎨',
+        '🎭', '🎬', '🎮', '🏆', '🥇', '🎁', '🎈', '🎪', '🎲'
+    ];
+    return emojis[Math.floor(Math.random() * emojis.length)];
+}
+
+/**
  * Format a Google Calendar event for display
  * @param {Object} event - Google Calendar event
  * @returns {string} Formatted event string
@@ -10,11 +25,12 @@ function formatEvent(event) {
     const description = event.description || '';
     const location = event.location || '';
 
-    // Split description at first line break:
-    // - Short description (before first \n) is shown in the digest
-    // - Long description (after first \n) is ignored for now (reserved for future use)
-    const shortDescription = description.includes('\n')
-        ? description.split('\n')[0].trim()
+    // Split description at first empty line (double line break):
+    // - Short description (before first \n\n) is shown in the digest
+    //   Can span multiple lines (e.g., bullet points, multi-line summaries)
+    // - Long description (after first \n\n) is ignored for now (reserved for future use)
+    const shortDescription = description.includes('\n\n')
+        ? description.split('\n\n')[0].trim()
         : description.trim();
 
     let timeStr = '';
@@ -28,20 +44,26 @@ function formatEvent(event) {
         timeStr = 'All day';
     }
 
-    // Line 1: Title
-    let eventText = `*${title}*`;
+    // Line 1: Title with random emoji
+    const emoji = getRandomEmoji();
+    let eventText = `${emoji} *${title}*`;
 
-    // Line 2: Time and place (below the title)
+    // Line 2: Location and time (below the title) with pin emoji
     const metaParts = [];
-    if (timeStr) metaParts.push(timeStr);
     if (location) metaParts.push(location);
+    if (timeStr) metaParts.push(timeStr);
     if (metaParts.length > 0) {
-        eventText += `\n${metaParts.join(' • ')}`;
+        eventText += `\n📍 ${metaParts.join(' • ')}`;
     }
 
-    // Line 3: Short description (optional)
+    // Line 3: Short description (optional) with 4-space indentation
     if (shortDescription) {
-        eventText += `\n${shortDescription}`;
+        // Indent each line of the short description with 4 spaces
+        const indentedDescription = shortDescription
+            .split('\n')
+            .map(line => `    ${line}`)
+            .join('\n');
+        eventText += `\n${indentedDescription}`;
     }
 
     return eventText;

@@ -12,7 +12,8 @@
  */
 
 const mode = process.argv[2] || 'daily';
-const baseUrl = process.argv[3] || 'http://localhost:3000';
+// Get URL from: 1) command line arg, 2) VERCEL_URL env var, 3) default to localhost
+const baseUrl = process.argv[3] || process.env.VERCEL_URL || 'http://localhost:3000';
 
 if (mode !== 'daily' && mode !== 'weekly') {
     console.error('❌ Invalid mode. Use "daily" or "weekly"');

@@ -10,8 +10,8 @@
         "test": "node --test",
         "call:daily": "node scripts/call-endpoint.js daily",
         "call:weekly": "node scripts/call-endpoint.js weekly",
-        "call:daily:prod": "node scripts/call-endpoint.js daily https://your-project.vercel.app",
-        "call:weekly:prod": "node scripts/call-endpoint.js weekly https://your-project.vercel.app"
+        "call:daily:prod": "VERCEL_URL=${VERCEL_URL:-https://your-project.vercel.app} node scripts/call-endpoint.js daily",
+        "call:weekly:prod": "VERCEL_URL=${VERCEL_URL:-https://your-project.vercel.app} node scripts/call-endpoint.js weekly"
     },
     "keywords": [
         "slack",
